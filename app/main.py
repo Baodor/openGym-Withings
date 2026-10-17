@@ -152,12 +152,12 @@ async def fetch_measures():
     rows = []
     async with httpx.AsyncClient(timeout=client_timeout) as client:
         for _ in range(250):  # bounded pagination
-            response = await client.post("https://wbsapi.withings.net/v2/measure",
+            response = await client.post("https://wbsapi.withings.net/measure",
                                          data=options, headers={"Authorization":f"Bearer {token}"})
             response.raise_for_status()
             content = response.json()
             if content.get("status") != 0:
-                raise RuntimeError("Withings-Messwerte: API-Status %s" % content.get("status"))
+                raise RuntimeError("Withings-Messwerte: API-Status %s; Anfrage von Withings abgelehnt. Bitte API-Berechtigungen und Parameter prüfen." % content.get("status"))
             body = content.get("body", {})
             rows.extend(body.get("measuregrps", []))
             if not body.get("more"):
@@ -457,4 +457,8 @@ async def sync_api(request: Request, mode: str):
     require_admin(request)
     if mode not in ("preview", "run"):
         raise HTTPException(404, "Nicht gefunden")
-    return await perform_sync(dry_run=mode=="preview")
+    try:
+        return await perform_sync(dry_run=mode=="preview")
+    except RuntimeError as exc:
+        # Expected integration errors are upstream failures, not internal server bugs.
+        raise HTTPException(502, detail=str(exc)) from None
