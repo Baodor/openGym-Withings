@@ -89,7 +89,8 @@ Das Programm benötigt **keinen externen Callback-Server**: Beide OAuth-Weiterle
   ├── bridge.db
   ├── fernet.key
   ├── session.key
-  └── setup.key
+  ├── setup.key
+  └── storage.id        # identisch mit BRIDGE_STORAGE_ID aus .env
 ```
 
 Die persistenten Dateien unter `/mnt/docker/appdata/opengym-withings` gehören in dein reguläres Server-Backup. **`fernet.key` und `bridge.db` müssen gemeinsam gesichert werden** – ohne Schlüssel sind die verschlüsselten OAuth-Tokens nicht mehr lesbar.
@@ -125,10 +126,14 @@ cp .env.example .env
 # Docker-Compose-Umgebung prüfen
 nano .env
 
+# Nur bei einer bewusst brandneuen Installation (leerer Appdata-Ordner):
+python3 scripts/storage_admin.py init
+
+# Prüft den Datenspeicher, erstellt ein Backup und startet dann:
 bash scripts/install.sh
 ```
 
-Die Installation erstellt nur das Bridge-Appdata-Verzeichnis, baut das eigene Image und startet **ausschließlich die Bridge**. Es gibt **kein `chown -R`**, kein `docker compose down` anderer Projekte und keine Migration von openGym.
+Die Installation **erstellt keinen Ersatz für fehlende Bestandsdaten**. Initialisierung erfolgt ausschließlich mit dem bewussten Einmal-Befehl `init`. Bestehende Installationen müssen mit `adopt` übernommen werden (siehe unten), bevor der neue Container gestartet werden kann. Es gibt **kein `chown -R`**, kein `docker compose down` anderer Projekte und keine Migration von openGym.
 
 ### Dateirechte
 
@@ -306,29 +311,80 @@ Der Datenumfang hängt von deiner konkreten Withings-Waage ab. Die Bridge speich
 > [!CAUTION]
 > Die Bridge verarbeitet private Gesundheitsdaten. Betreibe sie nicht ungeschützt im Internet, veröffentliche keine Debug-Logs mit Tokens und setze `ALLOWED_CIDRS` nicht auf `0.0.0.0/0`. Wenn du sicher gehen möchtest, dass ein VPS-Reverse-Proxy die Bridge nicht von außen erreichbar macht, zusätzlich dessen Router-Konfiguration kontrollieren.
 
-## Betrieb, Backups und Updates
+## Schutz vor Datenverlust bei Updates (ab 18.10.2026)
+
+Die Bridge verwaltet SQLite-Einstellungen und verschlüsselte OAuth-/Pairing-Tokens unter
+`/mnt/docker/appdata/opengym-withings`. Bei einem Neustart werden **niemals automatisch
+eine neue Datenbank, ein neuer Fernet-Schlüssel oder neue Login-Daten erstellt**.
+
+Die Sicherheitsmaßnahmen:
+
+- Das persistente Verzeichnis wird in Docker Compose mit `bind.create_host_path: false`
+  eingehängt. Ein verschwundener Hostordner führt zum Startfehler statt zu einem leeren Ersatz.
+- `BRIDGE_STORAGE_ID` in der lokal verbleibenden `.env` muss mit `/data/storage.id` übereinstimmen.
+  Eine falsche Volume-Quelle wird abgelehnt.
+- Beim Start werden Schlüssel, Tabellen, SQLite-Konsistenz und Entschlüsselbarkeit vorhandener
+  Tokens validiert. Fehler verhindern den Start; die App erstellt **nichts** neu.
+- `scripts/safe-update.sh` validiert zuerst den Speicher und erstellt über SQLite `backup()`
+  einen konsistenten Snapshot mit den **zugehörigen** Schlüsseldateien und der `.env`.
+  Erst danach lädt das Skript neuen Code und erstellt den Bridge-Container neu.
+- Backups liegen unter `/mnt/docker/backups/opengym-withings/` mit eingeschränkten Dateirechten.
+  **Backups enthalten die zur Entschlüsselung notwendigen Schlüssel und sind geheim zu halten.**
+
+### Einmalige Übernahme einer bestehenden Installation (wichtig!)
+
+**Wenn Zugangsdaten gerade verschwunden sind, zunächst nichts neu einrichten!**
+Es kann sein, dass `bridge.db` und `fernet.key` in einem anderen Appdata-Verzeichnis liegen.
+Vor einer Übernahme erst die richtigen Dateien ermitteln:
 
 ```bash
 cd /mnt/docker/compose/openGym-Withings
-
-# Status
- docker compose ps
-
-# Letzte Bridge-Logs
- docker compose logs --tail=100 bridge
-
-# Nur diese Bridge neu starten
- docker compose restart bridge
-
-# Feature-Branch aktualisieren und Bridge neu bauen
- git pull
- docker compose up -d --build bridge
-
-# Sicherungsdateien: nur Bridge-Verzeichnis
- tar -C /mnt/docker/appdata -czf "/mnt/docker/backups/opengym-withings-$(date +%Y%m%d-%H%M%S).tgz" opengym-withings
+# Liest nur Datei-Metadaten; keine Secrets ausgeben:
+find /mnt/docker/appdata /mnt/docker/compose \
+  -type f \( -name 'bridge.db' -o -name 'fernet.key' -o -name 'storage.id' \) \
+  -printf '%p (%s Byte)\n' 2>/dev/null
+docker inspect opengym-withings --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
 ```
 
-Bei produktivem Betrieb das Backup der SQLite-Datenbank mit einem konsistenten Snapshot erstellen (`sqlite3 .backup` oder Container kurz anhalten) – `tar` allein während eines Schreibvorgangs ist nicht garantiert konsistent.
+Liegen die **richtige** alte Datenbank, `fernet.key`, `session.key` und `setup.key`
+zusammen unter `/mnt/docker/appdata/opengym-withings`, muss dieser bisherige Stand
+**ein einziges Mal** registriert werden. Die Übernahme verlangt ausdrücklich eine bereits
+vorhandene Pocket-ID-Konfiguration und verweigert leere oder unvollständige Daten:
+
+```bash
+cd /mnt/docker/compose/openGym-Withings
+python3 scripts/storage_admin.py adopt
+python3 scripts/storage_admin.py verify
+python3 scripts/storage_admin.py backup
+```
+
+**Nicht `init` auf einen bestehenden Bestand anwenden.** `init` ist ausschließlich
+für eine bewusst neue und leere Installation vorgesehen und verweigert Ordner mit Inhalt.
+
+Ist die `.env`-Speicherkennung schon vorhanden, aber der Container zeigt ein leeres
+Setup oder der Datenspeicher besteht den Check nicht: **abbrechen**, vorheriges Appdata
+oder Backups suchen und gegebenenfalls wiederherstellen. Das Skript überschreibt eine
+bestehende Speicherkennung nicht. Bei einer alten, bereits irrtümlich neu erzeugten
+Datenbank sind verlorene Tokens ohne passendes Backup nicht automatisch rekonstruierbar.
+
+Wenn der korrekte Datenbestand übernommen wurde, erfolgt künftig **jedes Update** mit:
+
+```bash
+cd /mnt/docker/compose/openGym-Withings
+bash scripts/safe-update.sh
+```
+
+Nicht mehr die Kombination `git pull && docker compose up --force-recreate` ohne
+vorgelagerten Speichercheck und Backup verwenden.
+
+### Status und Logs
+
+```bash
+cd /mnt/docker/compose/openGym-Withings
+docker compose ps bridge
+docker compose logs --tail=100 bridge
+python3 scripts/storage_admin.py verify
+```
 
 ## Tests und Entwicklung
 
