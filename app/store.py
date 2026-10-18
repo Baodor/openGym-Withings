@@ -9,27 +9,56 @@ from cryptography.fernet import Fernet
 DATA = Path(os.environ.get("DATA_DIR", "/data"))
 
 def prepare() -> None:
-    DATA.mkdir(parents=True, exist_ok=True)
-    if not (DATA / "session.key").exists():
-        (DATA / "session.key").write_text(secrets.token_urlsafe(48))
-        (DATA / "session.key").chmod(0o600)
-    if not (DATA / "fernet.key").exists():
-        (DATA / "fernet.key").write_bytes(Fernet.generate_key())
-        (DATA / "fernet.key").chmod(0o600)
-    if not (DATA / "setup.key").exists():
-        (DATA / "setup.key").write_text(secrets.token_urlsafe(24))
-        (DATA / "setup.key").chmod(0o600)
-    with db() as con:
-        con.executescript("""
-        CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS measures (group_id TEXT PRIMARY KEY, timestamp INTEGER NOT NULL,
-            day TEXT NOT NULL, details TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS logs (id INTEGER PRIMARY KEY AUTOINCREMENT, stamp TEXT DEFAULT CURRENT_TIMESTAMP,
-            level TEXT NOT NULL, message TEXT NOT NULL);
-        """)
-        con.execute("INSERT OR IGNORE INTO settings VALUES ('interval_minutes','60')")
-        con.execute("INSERT OR IGNORE INTO settings VALUES ('prefer_withings','true')")
-        con.execute("INSERT OR IGNORE INTO settings VALUES ('sync_enabled','false')")
+    """Fail closed if the persistent state is missing, moved or corrupted.
+
+    Runtime never bootstraps an empty database or generates replacement keys.
+    A dedicated, explicit storage initialization/adoption is required.
+    """
+    expected = os.environ.get("BRIDGE_STORAGE_ID", "").strip()
+    if not expected:
+        raise RuntimeError(
+            "BRIDGE_STORAGE_ID fehlt. Laufende Installation NICHT neu einrichten; "
+            "zuerst persistenten Speicher prüfen und scripts/storage_admin.py verwenden."
+        )
+    if not DATA.is_dir():
+        raise RuntimeError(f"Persistenter Speicher fehlt: {DATA}; Start aus Sicherheitsgründen verweigert.")
+    required = ("storage.id", "bridge.db", "fernet.key", "session.key", "setup.key")
+    missing = [name for name in required if not (DATA / name).is_file()]
+    if missing:
+        raise RuntimeError(
+            "Persistenter Speicher unvollständig (" + ", ".join(missing) +
+            "). Kein automatisches Zurücksetzen; bestehendes Backup/Mount prüfen."
+        )
+    actual = (DATA / "storage.id").read_text(encoding="ascii").strip()
+    if actual != expected:
+        raise RuntimeError("BRIDGE_STORAGE_ID stimmt nicht mit dem gespeicherten Datenspeicher überein. Start verweigert.")
+    try:
+        cipher = Fernet((DATA / "fernet.key").read_bytes())
+        if not (DATA / "session.key").read_text().strip():
+            raise ValueError("empty session.key")
+        if not (DATA / "setup.key").read_text().strip():
+            raise ValueError("empty setup.key")
+        con = sqlite3.connect(f"file:{DATA / 'bridge.db'}?mode=ro", uri=True, timeout=15)
+        try:
+            if con.execute("PRAGMA quick_check").fetchone()[0] != "ok":
+                raise ValueError("SQLite quick_check failed")
+            names = {r[0] for r in con.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )}
+            if not {"settings", "measures", "logs"}.issubset(names):
+                raise ValueError("missing required tables")
+            for (encrypted,) in con.execute(
+                "SELECT value FROM settings WHERE key LIKE 'secret_%' AND value <> ''"
+            ):
+                cipher.decrypt(encrypted.encode("utf-8"))
+        finally:
+            con.close()
+    except Exception as exc:
+        raise RuntimeError(
+            "Bridge-Datenbank oder Verschlüsselungsschlüssel beschädigt/inkonsistent; "
+            "Start verweigert, bitte Backup prüfen."
+        ) from exc
+
 
 def db():
     con = sqlite3.connect(DATA / "bridge.db", timeout=15)
