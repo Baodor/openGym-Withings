@@ -10,8 +10,9 @@ RUN umask 022 \
 COPY app /app/app
 RUN chmod a+rx /app && chmod -R a+rX /app/app
 USER 10001:10001
-# Smoke-test all modules without creating real persistent state.
+# Parse Python sources without creating __pycache__ directories. Build USER is
+# deliberately unprivileged and /app/app must remain non-writable.
 # Runtime bootstrap is forbidden; real state is initialized separately.
-RUN python -m compileall -q /app/app && python -c 'import app.store, app.sync; print("Bridge modules import OK")'
+RUN python -B -c 'import ast, pathlib; [ast.parse(p.read_text(encoding="utf-8"), filename=str(p)) for p in pathlib.Path("/app/app").rglob("*.py")]; import app.store, app.sync; print("Bridge modules import OK (read-only syntax check)")'
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
