@@ -99,3 +99,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .metric{padding:14px 11px}.metric>div{font-size:8px}.card{padding:17px 13px}
 }
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
+/* Desktop gets the original full navigation labels; phones get succinct tabs. */
+.nav-short{display:none}
+@media(max-width:710px){
+  .navitem .nav-full{display:none}
+  .navitem .nav-short{display:inline}
+  .navitem .navlabel{display:block;max-width:100%;font-size:10px;line-height:1.15}
+  .navitem{white-space:normal}
+}
