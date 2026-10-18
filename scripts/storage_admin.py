@@ -194,7 +194,7 @@ def backup(data: Path, env: Path, destination: Path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("verify", "adopt", "init", "backup"))
+    parser.add_argument("action", choices=("probe", "verify", "adopt", "init", "backup"))
     parser.add_argument("--data", type=Path, default=Path("/mnt/docker/appdata/opengym-withings"))
     parser.add_argument("--env", type=Path, default=Path(".env"))
     parser.add_argument("--backup-dir", type=Path, default=Path("/mnt/docker/backups/opengym-withings"))
@@ -207,6 +207,14 @@ def main():
         initialize(data, env)
     elif args.action == "adopt":
         adopt(data, env)
+    elif args.action == "probe":
+        settings = inspect(data)
+        print("Vorhandenen Datenbestand nur lesend geprüft (noch nicht registriert):", data)
+        print("Pocket-ID eingerichtet:", bool(settings.get("oidc_client_id") and settings.get("secret_oidc_client_secret")))
+        print("Withings eingerichtet:", bool(settings.get("withings_client_id") and settings.get("secret_withings_client_secret")))
+        print("Withings verbunden:", bool(settings.get("secret_withings_token")))
+        print("openGym gekoppelt:", bool(settings.get("secret_opengym_token")))
+        print("Hinweis: Nur einen eindeutig identifizierten vollständigen Altbestand mit 'adopt' übernehmen.")
     elif args.action == "verify":
         settings = verify(data, env)
         print("Speicherkennung, SQLite und Schlüsseldateien vorhanden.")
