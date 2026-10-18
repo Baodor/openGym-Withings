@@ -138,7 +138,7 @@ def initialize(data: Path, env: Path):
     verify(data, env)
     print("Neuer persistenter Speicher explizit eingerichtet. Schlüssel werden nicht ausgegeben.")
 
-def adopt(data: Path, env: Path):
+def adopt(data: Path, env: Path, *, allow_partial: bool = False):
     """Enroll ONLY a previously configured legacy installation, never an empty reset."""
     config = read_env(env)
     if config.get("BRIDGE_STORAGE_ID") or (data / "storage.id").exists():
@@ -149,6 +149,13 @@ def adopt(data: Path, env: Path):
             "Keine vollständige Pocket-ID-Konfiguration in bridge.db gefunden. "
             "Möglicherweise ist bereits ein falscher/leerer Speicher aktiv. "
             "Zuerst alte Daten/Backups suchen; NICHT automatisch übernehmen."
+        )
+    if not allow_partial and (not settings.get("secret_withings_token") or not settings.get("secret_opengym_token")):
+        raise StorageError(
+            "Alter Datenbestand enthält nicht beide bestehenden Verknüpfungen "
+            "(Withings/openGym). Eventuell nach Datenverlust neu erzeugt! "
+            "Erst alte Dateien/Backups suchen. Nur bei ABSICHTLICH unvollständigem "
+            "Altbestand 'adopt --allow-partial' verwenden."
         )
     ident = secrets.token_hex(20)
     create_private_file(data / "storage.id", (ident + "\n").encode("ascii"))
@@ -198,6 +205,7 @@ def main():
     parser.add_argument("--data", type=Path, default=Path("/mnt/docker/appdata/opengym-withings"))
     parser.add_argument("--env", type=Path, default=Path(".env"))
     parser.add_argument("--backup-dir", type=Path, default=Path("/mnt/docker/backups/opengym-withings"))
+    parser.add_argument("--allow-partial", action="store_true", help="Allow registering intentionally unlinked legacy stores (never for accidental data loss)")
     args = parser.parse_args()
     data = args.data.expanduser().absolute()
     env = args.env.expanduser().absolute()
@@ -206,7 +214,7 @@ def main():
     if args.action == "init":
         initialize(data, env)
     elif args.action == "adopt":
-        adopt(data, env)
+        adopt(data, env, allow_partial=args.allow_partial)
     elif args.action == "probe":
         settings = inspect(data)
         print("Vorhandenen Datenbestand nur lesend geprüft (noch nicht registriert):", data)
