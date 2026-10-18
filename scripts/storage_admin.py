@@ -152,7 +152,11 @@ def adopt(data: Path, env: Path):
         )
     ident = secrets.token_hex(20)
     create_private_file(data / "storage.id", (ident + "\n").encode("ascii"))
-    set_env_id(env, ident)
+    try:
+        set_env_id(env, ident)
+    except Exception:
+        (data / "storage.id").unlink()
+        raise
     verify(data, env)
     print("Bestehenden konfigurierten Speicher registriert. Keine Zugangsdaten geändert.")
 
@@ -174,11 +178,16 @@ def backup(data: Path, env: Path, destination: Path):
         shutil.copyfile(env, work / "dotenv.backup")
         (work / "dotenv.backup").chmod(0o600)
         temp_archive = destination / ("." + name + ".incomplete")
-        with tarfile.open(temp_archive, mode="w:gz") as tar:
-            for filename in ("bridge.db", "fernet.key", "session.key", "setup.key", "storage.id", "dotenv.backup"):
-                tar.add(work / filename, arcname=filename)
-        temp_archive.chmod(0o600)
-        os.replace(temp_archive, destination / name)
+        # Secrets are present in the archive: restrict permissions BEFORE writing.
+        fd = os.open(temp_archive, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as sink:
+                with tarfile.open(fileobj=sink, mode="w:gz") as tar:
+                    for filename in ("bridge.db", "fernet.key", "session.key", "setup.key", "storage.id", "dotenv.backup"):
+                        tar.add(work / filename, arcname=filename)
+            os.replace(temp_archive, destination / name)
+        finally:
+            temp_archive.unlink(missing_ok=True)
         print(f"Verifiziertes Backup erstellt: {destination / name}")
     finally:
         shutil.rmtree(work)
