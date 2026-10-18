@@ -13,6 +13,11 @@ jobs:
       - run: pip install -r requirements.txt pytest
       - run: python -m pytest -q
       - run: python -m compileall -q app
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check frontend JavaScript syntax
+        run: node --check app/static/app.js
       - name: Full application import smoke test
         env:
           DATA_DIR: /tmp/opengym-withings-ci
