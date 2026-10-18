@@ -28,3 +28,14 @@ jobs:
           python scripts/storage_admin.py init --data "$DATA_DIR" --env /tmp/opengym-withings-ci.env
           export BRIDGE_STORAGE_ID="$(sed -n 's/^BRIDGE_STORAGE_ID=//p' /tmp/opengym-withings-ci.env)"
           python -c 'import app.main; print("Full app import OK")'
+      - name: Build Docker image as the configured non-root user
+        run: docker build --tag opengym-withings:ci .
+      - name: Smoke-test image with read-only filesystem and existing state
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --user "$(id -u):$(id -g)" \
+            --mount type=bind,src=/tmp/opengym-withings-ci,dst=/data \
+            -e DATA_DIR=/data \
+            -e BRIDGE_STORAGE_ID="$(sed -n 's/^BRIDGE_STORAGE_ID=//p' /tmp/opengym-withings-ci.env)" \
+            opengym-withings:ci \
+            python -B -c 'import app.main; print("Image import with existing credentials OK")'
