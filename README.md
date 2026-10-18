@@ -344,6 +344,8 @@ find /mnt/docker/appdata /mnt/docker/compose \
   -type f \( -name 'bridge.db' -o -name 'fernet.key' -o -name 'storage.id' \) \
   -printf '%p (%s Byte)\n' 2>/dev/null
 docker inspect opengym-withings --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+# Bei vorhandenem vollständigen Altbestand: Status ohne Geheimnisse ansehen:
+python3 scripts/storage_admin.py probe
 ```
 
 Liegen die **richtige** alte Datenbank, `fernet.key`, `session.key` und `setup.key`
