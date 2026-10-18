@@ -9,8 +9,15 @@ import httpx
 
 
 def test_getmeas_calls_measure_not_v2_measure(monkeypatch, tmp_path):
-    # app.main creates its local DB and session keys at import time.
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    # Storage is explicitly initialized; runtime imports must never make keys or DB.
+    from scripts.storage_admin import initialize, read_env
+    from app import store
+    state = tmp_path / "data"
+    envfile = tmp_path / ".env"
+    envfile.write_text("PUBLIC_URL=https://opengym-withings.home.glockb.de\\n")
+    initialize(state, envfile)
+    monkeypatch.setattr(store, "DATA", state)
+    monkeypatch.setenv("BRIDGE_STORAGE_ID", read_env(envfile)["BRIDGE_STORAGE_ID"])
     from app import main
 
     seen = []
