@@ -112,6 +112,8 @@ def test_explicit_legacy_adoption_retains_older_secrets(tmp_path, monkeypatch):
     store.prepare()
     store.put("oidc_client_id", "previous-id")
     store.secret_set("oidc_client_secret", "previous-secret")
+    store.secret_set("withings_token", "previous-withings-token")
+    store.secret_set("opengym_token", "previous-opengym-token")
     # Simulate the real pre-upgrade layout: complete DB and keys, no marker.
     (data / "storage.id").unlink()
     env.write_text("PUBLIC_URL=https://local.example\n")
@@ -121,6 +123,8 @@ def test_explicit_legacy_adoption_retains_older_secrets(tmp_path, monkeypatch):
     monkeypatch.setenv("BRIDGE_STORAGE_ID", new_id)
     store.prepare()
     assert store.secret_get("oidc_client_secret") == "previous-secret"
+    assert store.secret_get("withings_token") == "previous-withings-token"
+    assert store.secret_get("opengym_token") == "previous-opengym-token"
 
 
 def test_atomic_backup_has_matching_database_and_keys(tmp_path, monkeypatch):
