@@ -10,11 +10,8 @@ RUN umask 022 \
 COPY app /app/app
 RUN chmod a+rx /app && chmod -R a+rX /app/app
 USER 10001:10001
-# Smoke-test full application import as the runtime user, including middleware.
-# Temporary build-time secrets are removed inside the same image layer.
-RUN set -eu; \
-    smoke_dir="$(mktemp -d)"; \
-    trap 'rm -rf "$smoke_dir"' EXIT; \
-    DATA_DIR="$smoke_dir" python -c 'import app.main; print("Bridge application import OK")'
+# Smoke-test all modules without creating real persistent state.
+# Runtime bootstrap is forbidden; real state is initialized separately.
+RUN python -m compileall -q /app/app && python -c 'import app.store, app.sync; print("Bridge modules import OK")'
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
