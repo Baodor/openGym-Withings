@@ -1,0 +1,41 @@
+name: Tests
+on:
+  push:
+  pull_request:
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest -q
+      - run: python -m compileall -q app
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check frontend JavaScript syntax
+        run: node --check app/static/app.js
+      - name: Verify all five navigation tabs
+        run: node --test tests/ui-navigation.test.cjs
+      - name: Full application import smoke test
+        env:
+          DATA_DIR: /tmp/opengym-withings-ci
+        run: |
+          printf 'PUBLIC_URL=https://opengym-withings.home.glockb.de\n' > /tmp/opengym-withings-ci.env
+          python scripts/storage_admin.py init --data "$DATA_DIR" --env /tmp/opengym-withings-ci.env
+          export BRIDGE_STORAGE_ID="$(sed -n 's/^BRIDGE_STORAGE_ID=//p' /tmp/opengym-withings-ci.env)"
+          python -c 'import app.main; print("Full app import OK")'
+      - name: Build Docker image as the configured non-root user
+        run: docker build --tag opengym-withings:ci .
+      - name: Smoke-test image with read-only filesystem and existing state
+        run: |
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            --user "$(id -u):$(id -g)" \
+            --mount type=bind,src=/tmp/opengym-withings-ci,dst=/data \
+            -e DATA_DIR=/data \
+            -e BRIDGE_STORAGE_ID="$(sed -n 's/^BRIDGE_STORAGE_ID=//p' /tmp/opengym-withings-ci.env)" \
+            opengym-withings:ci \
+            python -B -c 'import app.main; print("Image import with existing credentials OK")'

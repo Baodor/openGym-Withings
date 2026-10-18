@@ -1,0 +1,52 @@
+services:
+  bridge:
+    build: .
+    image: opengym-withings:local
+    container_name: opengym-withings
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-1000}:${PGID:-1000}"
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+      SYNC_INTERVAL_MINUTES: '60'
+    volumes:
+      - type: bind
+        source: ${BRIDGE_DATA_HOST_PATH:-/mnt/docker/appdata/opengym-withings}
+        target: /data
+        bind:
+          # Don't silently make an empty directory if the old mount goes missing.
+          create_host_path: false
+    networks:
+      - proxy
+      - opengym_backend
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3)"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.docker.network=proxy'
+      - 'traefik.http.routers.opengym-withings.rule=Host(`opengym-withings.home.glockb.de`)'
+      - 'traefik.http.routers.opengym-withings.entrypoints=websecure'
+      - 'traefik.http.routers.opengym-withings.tls=true'
+      - 'traefik.http.routers.opengym-withings.tls.certresolver=cloudflare'
+      - 'traefik.http.routers.opengym-withings.service=opengym-withings'
+      - 'traefik.http.routers.opengym-withings.middlewares=opengym-withings-lan@docker'
+      - 'traefik.http.middlewares.opengym-withings-lan.ipallowlist.sourcerange=${ALLOWED_CIDRS:-192.168.1.0/24,100.64.0.0/10}'
+      - 'traefik.http.services.opengym-withings.loadbalancer.server.port=8000'
+networks:
+  proxy:
+    external: true
+  opengym_backend:
+    external: true
+    name: ${OPENGYM_BACKEND_NETWORK:-opengym_backend}

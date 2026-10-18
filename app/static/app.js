@@ -1,0 +1,83 @@
+const DEMO = window.location.protocol === 'file:' || window.location.pathname.endsWith('/preview-local.html');
+const sample = {oidc:true,withings_app:true,withings:true,opengym:true,opengym_user:'Baodor',
+  interval_minutes:60,history_days:3650,sync_enabled:true,prefer_withings:true,
+  measures_count:128,last_sync:'2026-10-17T08:24:00Z',issuer:'https://id.glockb.de',allowed_group:'admin',
+  withings_client_id:'1f3a••••••••', latest:{weight_kg:76.4, fat_pct:22.3,muscle_kg:54.1},
+  recent:[77.9,77.6,77.3,77.5,77.1,76.9,77.0,76.6,76.8,76.5,76.4].map((weight,i)=>({weight_kg:weight,day:`2026-10-${String(i+7).padStart(2,'0')}`})),
+  logs:[{stamp:'2026-10-17 10:24:05',level:'info',message:'Sync: 1 neu, 0 ersetzt, 127 unverändert'},
+    {stamp:'2026-10-17 09:24:05',level:'info',message:'Sync: 0 neu, 0 ersetzt, 127 unverändert'},
+    {stamp:'2026-10-17 08:24:04',level:'info',message:'Mit Withings verbunden'},
+    {stamp:'2026-10-17 08:23:15',level:'info',message:'openGym-Profil verbunden'}]};
+let current='dashboard';
+const $ = s=>document.querySelector(s);
+const $$ = s=>[...document.querySelectorAll(s)];
+const num = (v,dec=1)=>Number(v).toLocaleString('de-DE',{minimumFractionDigits:dec, maximumFractionDigits:dec});
+function message(text,bad=false){const el=$('#notice');el.textContent=text;el.classList.remove('hidden');el.classList.toggle('bad',bad);setTimeout(()=>el.classList.add('hidden'),6000)}
+async function api(path,body){if(DEMO)return sample;const opt={credentials:'same-origin'};if(body!==undefined){opt.method='POST';opt.headers={'Content-Type':'application/json'};opt.body=JSON.stringify(body)}const r=await fetch(path,opt);let data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||data.detail||`HTTP ${r.status}`);return data}
+function switchTab(tab){
+  current=tab;
+  $$('.panel').forEach(p=>p.classList.toggle('hidden',p.dataset.panel!==tab));
+  $$('.navitem').forEach(b=>{
+    const active=b.dataset.tab===tab;
+    b.classList.toggle('active',active);
+    if(active)b.setAttribute('aria-current','page');
+    else b.removeAttribute('aria-current');
+  });
+  $('#crumb').textContent=({dashboard:'ÜBERSICHT',connections:'VERBINDUNGEN',sync:'SYNCHRONISIERUNG',logs:'PROTOKOLLE',security:'SICHERHEIT'})[tab]||tab;
+  if(window.matchMedia('(max-width: 710px)').matches)window.scrollTo({top:0,behavior:'auto'});
+  if(tab==='dashboard'&&lastState)requestAnimationFrame(()=>chart(lastState.recent||[]));
+}
+let lastState=null;
+let resizeChartTimer;
+function chart(rows){
+  const target=$('#weight-chart');
+  const axis=$('.xaxis');
+  const series=rows.filter(r=>r.weight_kg!=null && Number.isFinite(Number(r.weight_kg)) && r.day)
+    .slice(-18).map(r=>({weight:Number(r.weight_kg),day:r.day}));
+  axis.replaceChildren();
+  if(series.length<2){
+    target.replaceChildren();
+    const empty=document.createElement('p');
+    empty.className='chart-empty';
+    empty.textContent='Der Gewichtsverlauf erscheint, sobald mindestens zwei Messungen vorliegen.';
+    target.append(empty);
+    return;
+  }
+  const values=series.map(r=>r.weight);
+  const low=Math.floor(Math.min(...values)-.7),high=Math.ceil(Math.max(...values)+.7);
+  const W=Math.max(240,Math.round(target.clientWidth)||720);
+  const H=Math.max(150,Math.round(target.clientHeight)||235);
+  const pad=15;
+  const scale=v=>H-pad-(v-low)/(high-low)*(H-2*pad);
+  const x=i=>pad+(W-2*pad)*i/(series.length-1);
+  const coords=values.map((v,i)=>[x(i),scale(v)]);
+  const line=coords.map(([a,b],i)=>(i?'L':'M')+a.toFixed(1)+' '+b.toFixed(1)).join(' ');
+  const fill=line+` L ${x(series.length-1)} ${H-pad} L ${pad} ${H-pad} Z`;
+  const grid=[.15,.43,.71,.99].map(q=>`<line x1="${pad}" y1="${pad+(H-2*pad)*q}" x2="${W-pad}" y2="${pad+(H-2*pad)*q}" stroke="#30353f" stroke-dasharray="4 5"/>`).join('');
+  target.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gewichtsverlauf von ${values[0].toLocaleString('de-DE')} bis ${values.at(-1).toLocaleString('de-DE')} Kilogramm"><defs><linearGradient id="fill" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#a5ee9b" stop-opacity=".25"/><stop offset="1" stop-color="#a5ee9b" stop-opacity="0"/></linearGradient></defs>${grid}<path d="${fill}" fill="url(#fill)"/><path d="${line}" fill="none" stroke="#a8eda0" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(series.length-1)}" cy="${scale(values.at(-1))}" r="5" fill="#b1f5a7" stroke="#203b2b" stroke-width="2"/></svg>`;
+  const dateFormat=new Intl.DateTimeFormat('de-DE',{day:'2-digit',month:'short'});
+  for(let i=0;i<5;i++){
+    const entry=series[Math.round(i*(series.length-1)/4)];
+    const date=new Date(entry.day+'T12:00:00');
+    const label=document.createElement('span');
+    label.textContent=Number.isNaN(date.getTime())?entry.day:dateFormat.format(date);
+    axis.append(label);
+  }
+}
+window.addEventListener('resize',()=>{
+  clearTimeout(resizeChartTimer);
+  resizeChartTimer=setTimeout(()=>{
+    if(lastState&&!$('#appview').classList.contains('hidden')&&!$('[data-panel="dashboard"]').classList.contains('hidden'))chart(lastState.recent||[]);
+  },120);
+},{passive:true});
+function indicator(el,ok,yes,no){$(el).textContent=ok?yes:no;$(el).classList.toggle('off',!ok)}
+function render(s){lastState=s;$('#weight').innerHTML=s.latest?.weight_kg!=null?`${num(s.latest.weight_kg)} <small>kg</small>`:'–';$('#fat').innerHTML=s.latest?.fat_pct!=null?`${num(s.latest.fat_pct)} <small>%</small>`:'–';$('#muscle').innerHTML=s.latest?.muscle_kg!=null?`${num(s.latest.muscle_kg)} <small>kg</small>`:'–';$('#count').textContent=(s.measures_count||0).toLocaleString('de-DE');$('#headline').textContent=s.withings&&s.opengym?'Bridge ist verbunden':'Einrichtung noch nicht abgeschlossen';$('#last-sync').textContent=s.last_sync?new Date(s.last_sync).toLocaleString('de-DE'):'Noch keine Synchronisierung';indicator('#withings-status',s.withings,'Verbunden','Nicht verbunden');indicator('#gym-status',s.opengym,'Verbunden','Nicht verbunden');indicator('#oidc-status',s.oidc,'Aktiv','Inaktiv');$('#interval').value=s.interval_minutes||60;$('#history-days').value=s.history_days||3650;$('#prefer-withings').checked=!!s.prefer_withings;$('#sync-enabled').checked=!!s.sync_enabled;$('#wc').placeholder=s.withings_client_id||'Client-ID eingeben';$('#issuer').value=s.issuer||'https://id.glockb.de';$('#allowed-group').value=s.allowed_group||'admin';chart(s.recent||[]);$('#log-list').replaceChildren(...(s.logs||[]).map(l=>{let div=document.createElement('div');div.className='log-row';let t=document.createElement('time');t.textContent=l.stamp;let level=document.createElement('strong');level.textContent=l.level==='error'?'FEHLER':'INFO';level.classList.toggle('error',l.level==='error');let msg=document.createElement('span');msg.textContent=l.message;div.append(t,level,msg);return div}));}
+async function refresh(){const state=DEMO?sample:await api('/api/status');render(state)}
+async function run(path){try{message('Synchronisierung wird geprüft …');let info=await api(path,{});message(`Abgeschlossen: ${info.added} neu, ${info.replaced} ersetzt, ${info.unchanged} unverändert`);await refresh()}catch(e){message(e.message,true)}}
+$$('.navitem').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));
+$('#sync-now').addEventListener('click',()=>run('/api/sync/run'));$('#sync-run').addEventListener('click',()=>run('/api/sync/run'));$('#sync-preview').addEventListener('click',()=>run('/api/sync/preview'));$('#refresh-logs').addEventListener('click',refresh);
+function formJson(form){const data={};new FormData(form).forEach((value,key)=>{data[key]=value});return data}
+function bindForm(selector,url,transform){$(selector).addEventListener('submit',async e=>{e.preventDefault();try{let data=formJson(e.target);if(transform)data=transform(data);await api(url,data);message('Einstellungen gespeichert.');if(selector==='#setup-form')location.reload();else await refresh()}catch(err){message(err.message,true)}})}
+bindForm('#setup-form','/api/setup');bindForm('#withings-form','/api/config/withings');bindForm('#pair-form','/api/opengym/pair');bindForm('#oidc-form','/api/config/oidc');bindForm('#sync-form','/api/config/sync',d=>({...d,interval_minutes:Number(d.interval_minutes),history_days:Number(d.history_days),sync_enabled:$('#sync-enabled').checked,prefer_withings:$('#prefer-withings').checked}));
+$('#logout').addEventListener('click',async()=>{if(!DEMO){await api('/api/logout',{});location.reload()}});
+async function boot(){if(DEMO){render(sample);return}try{const ini=await api('/api/initial');$('#oidc-callback').textContent=ini.callback;$('#withings-callback').textContent=ini.withings_callback;document.body.classList.toggle('is-auth',!ini.configured||!ini.signed_in);if(!ini.configured||!ini.signed_in){$('#appview').classList.add('hidden');$('#authview').classList.remove('hidden');$('#logout').classList.add('hidden');$('#setup-form').classList.toggle('hidden',ini.configured);$('#oidc-login').classList.toggle('hidden',!ini.configured);if(ini.configured){$('#auth-title').textContent='Anmeldung mit Pocket-ID';$('#auth-description').textContent='Die Konfiguration ist geschützt. Melde dich mit deinem autorisierten Pocket-ID-Konto an.'}return}$('#username').textContent=ini.user||'Administrator';await refresh()}catch(e){message(e.message,true)}}boot();
