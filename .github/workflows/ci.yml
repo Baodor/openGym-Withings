@@ -18,6 +18,8 @@ jobs:
           node-version: '22'
       - name: Check frontend JavaScript syntax
         run: node --check app/static/app.js
+      - name: Verify all five navigation tabs
+        run: node --test tests/ui-navigation.test.cjs
       - name: Full application import smoke test
         env:
           DATA_DIR: /tmp/opengym-withings-ci
