@@ -108,3 +108,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{ou
   .navitem .navlabel{display:block;max-width:100%;font-size:10px;line-height:1.15}
   .navitem{white-space:normal}
 }
+
+/* The old .navitem span rule styles icon spans; labels now have nested spans too. */
+.navitem .navlabel{width:auto;flex:1;min-width:0;text-align:left;font-size:13px}
+.navitem .nav-full,.navitem .nav-short{width:auto;font-size:inherit;text-align:inherit}
+@media(max-width:710px){
+  .navitem .navlabel{flex:0 1 auto;text-align:center;font-size:10px}
+}
