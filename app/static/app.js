@@ -16,8 +16,8 @@ function message(text,bad=false){const el=$('#notice');el.textContent=text;el.cl
 async function api(path,body){if(DEMO)return sample;const opt={credentials:'same-origin'};if(body!==undefined){opt.method='POST';opt.headers={'Content-Type':'application/json'};opt.body=JSON.stringify(body)}const r=await fetch(path,opt);let data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||data.detail||`HTTP ${r.status}`);return data}
 function switchTab(tab){
   current=tab;
-  $('.panel').forEach(p=>p.classList.toggle('hidden',p.dataset.panel!==tab));
-  $('.navitem').forEach(b=>{
+  $$('.panel').forEach(p=>p.classList.toggle('hidden',p.dataset.panel!==tab));
+  $$('.navitem').forEach(b=>{
     const active=b.dataset.tab===tab;
     b.classList.toggle('active',active);
     if(active)b.setAttribute('aria-current','page');
