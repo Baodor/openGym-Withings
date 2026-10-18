@@ -11,7 +11,12 @@ services:
       DATA_DIR: /data
       SYNC_INTERVAL_MINUTES: '60'
     volumes:
-      - /mnt/docker/appdata/opengym-withings:/data
+      - type: bind
+        source: ${BRIDGE_DATA_HOST_PATH:-/mnt/docker/appdata/opengym-withings}
+        target: /data
+        bind:
+          # Don't silently make an empty directory if the old mount goes missing.
+          create_host_path: false
     networks:
       - proxy
       - opengym_backend
