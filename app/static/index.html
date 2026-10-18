@@ -2,15 +2,15 @@
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="color-scheme" content="dark"><meta name="theme-color" content="#101319"><title>openGym × Withings · Bridge</title><link rel="stylesheet" href="/static/style.css"></head>
 <body><div class="layout">
   <aside class="sidebar"><div class="brand"><div class="brand-icon">✳</div><div><strong>openGym<span>×</span>Withings</strong><small>BODY DATA BRIDGE</small></div></div>
-    <div class="sidecaption">WORKSPACE</div><nav id="nav">
-      <button class="navitem active" data-tab="dashboard"><span>◫</span> Übersicht</button>
-      <button class="navitem" data-tab="connections"><span>⌁</span> Verbindungen</button>
-      <button class="navitem" data-tab="sync"><span>⟳</span> Synchronisierung</button>
-      <button class="navitem" data-tab="logs"><span>≡</span> Protokolle</button>
-      <button class="navitem" data-tab="security"><span>⬡</span> Sicherheit</button>
+    <div class="sidecaption">WORKSPACE</div><nav id="nav" aria-label="Hauptnavigation">
+      <button type="button" class="navitem active" data-tab="dashboard" aria-current="page"><span>◫</span> <span class="navlabel">Übersicht</span></button>
+      <button type="button" class="navitem" data-tab="connections"><span>⌁</span> <span class="navlabel">Verbindungen</span></button>
+      <button type="button" class="navitem" data-tab="sync"><span>⟳</span> <span class="navlabel">Synchronisierung</span></button>
+      <button type="button" class="navitem" data-tab="logs"><span>≡</span> <span class="navlabel">Protokolle</span></button>
+      <button type="button" class="navitem" data-tab="security"><span>⬡</span> <span class="navlabel">Sicherheit</span></button>
     </nav><div class="sidefoot"><div class="sidedot"></div> Self-hosted · Lokale Instanz<small>v0.1.0 · Kein Cloud-Dashboard</small></div>
   </aside>
-  <main><header class="topbar"><div class="crumb">OPEN GYM <span>/</span> <b id="crumb">ÜBERSICHT</b></div><div class="topright"><span class="environment">⌁ <span>LAN ONLY</span></span><div class="avatar">B</div><span id="username">Administrator</span><button id="logout" title="Abmelden" class="logout">↗</button></div></header>
+  <main><header class="topbar"><div class="crumb">OPEN GYM <span>/</span> <b id="crumb">ÜBERSICHT</b></div><div class="topright"><span class="environment">⌁ <span>LAN ONLY</span></span><div class="avatar">B</div><span id="username">Administrator</span><button id="logout" type="button" title="Abmelden" aria-label="Abmelden" class="logout">↗</button></div></header>
     <div id="notice" class="notice hidden" role="status"></div>
     <div id="authview" class="authview hidden"><div class="authhero"><div class="brand-icon">✳</div><h1 id="auth-title">Verbindung absichern</h1><p id="auth-description">Verbinde Pocket-ID, um die Administrationsoberfläche abzusichern.</p></div>
       <form id="setup-form" class="settings-form hidden"><label>Einmaliger Setup-Code<input name="setup_code" required placeholder="Code aus /mnt/docker/appdata/.../setup.key"></label><label>Pocket-ID Issuer<input name="issuer" required value="https://id.glockb.de"></label><label>OIDC Client-ID<input name="client_id" required></label><label>OIDC Client-Secret<input name="client_secret" type="password" required></label><label>Erlaubte Pocket-ID-Gruppe<input name="allowed_group" value="admin" required></label><button class="primary">Pocket-ID aktivieren →</button></form>
