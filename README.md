@@ -351,7 +351,11 @@ python3 scripts/storage_admin.py probe
 Liegen die **richtige** alte Datenbank, `fernet.key`, `session.key` und `setup.key`
 zusammen unter `/mnt/docker/appdata/opengym-withings`, muss dieser bisherige Stand
 **ein einziges Mal** registriert werden. Die Übernahme verlangt ausdrücklich eine bereits
-vorhandene Pocket-ID-Konfiguration und verweigert leere oder unvollständige Daten:
+vorhandene Pocket-ID-Konfiguration und standardmäßig die bisherige Withings- und
+openGym-Verknüpfung. Fehlt eine davon unerwartet, verweigert sie die Übernahme:
+**Zuerst den ursprünglichen Datenspeicher suchen!** Nur bei einer bewusst noch
+nicht vollständig eingerichteten alten Installation ist
+`adopt --allow-partial` vorgesehen; nicht als Reparatur nach Datenverlust.
 
 ```bash
 cd /mnt/docker/compose/openGym-Withings
