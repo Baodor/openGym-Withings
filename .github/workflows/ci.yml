@@ -23,4 +23,8 @@ jobs:
       - name: Full application import smoke test
         env:
           DATA_DIR: /tmp/opengym-withings-ci
-        run: python -c 'import app.main; print("Full app import OK")'
+        run: |
+          printf 'PUBLIC_URL=https://opengym-withings.home.glockb.de\n' > /tmp/opengym-withings-ci.env
+          python scripts/storage_admin.py init --data "$DATA_DIR" --env /tmp/opengym-withings-ci.env
+          export BRIDGE_STORAGE_ID="$(sed -n 's/^BRIDGE_STORAGE_ID=//p' /tmp/opengym-withings-ci.env)"
+          python -c 'import app.main; print("Full app import OK")'
